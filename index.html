@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>Petualangan Kucing Sureal 2.0</title>
+    <!-- Memuat Font dari Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- Memuat Tone.js untuk musik dan suara -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #202020;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Press Start 2P', cursive;
+        }
+        canvas {
+            background-color: #5c94fc;
+            display: block;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+            text-shadow: 3px 3px 0 #000;
+            z-index: 20;
+        }
+        .ui-box {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 2rem 3rem;
+            border: 4px solid #fff;
+            box-shadow: 6px 6px 0 #000;
+        }
+        .action-button {
+            background: #fa2d2d;
+            border: 4px solid #fff;
+            padding: 1rem 2rem;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 1rem;
+            color: white;
+            cursor: pointer;
+            box-shadow: 4px 4px 0 #000;
+            transition: all 0.1s ease;
+        }
+        .action-button:hover {
+            background: #ff5e5e;
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 #000;
+        }
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: none; /* Diaktifkan via JS untuk mobile */
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            opacity: 0.6;
+            z-index: 10;
+        }
+        .control-btn {
+            width: 80px;
+            height: 80px;
+            background: #333;
+            color: white;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            user-select: none;
+        }
+        #score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="score-display" style="display: none;">SKOR: 0</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI untuk Start/Game Over -->
+    <div id="ui-container" class="ui-overlay">
+        <div class="ui-box">
+            <h1 id="ui-title" class="text-4xl mb-4">Kucing Sureal</h1>
+            <p id="ui-subtitle" class="mb-8">Petualangan Platformer</p>
+            <button id="start-button" class="action-button">MULAI</button>
+        </div>
+    </div>
+    
+    <!-- Kontrol untuk Mobile -->
+    <div id="mobile-controls">
+        <div>
+            <div id="btn-left" class="control-btn">←</div>
+            <div id="btn-right" class="control-btn" style="margin-left: 90px; position: absolute; left: 0;">→</div>
+        </div>
+        <div id="btn-jump" class="control-btn">↑</div>
+    </div>
+
+    <script>
+        // --- SETUP CANVAS & GAME ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const worldWidth = 6400; // Dunia lebih panjang!
+        const worldHeight = 480;
+        canvas.width = Math.min(window.innerWidth, 800);
+        canvas.height = worldHeight;
+        
+        // --- UI & AUDIO ELEMENTS ---
+        const uiContainer = document.getElementById('ui-container');
+        const uiTitle = document.getElementById('ui-title');
+        const uiSubtitle = document.getElementById('ui-subtitle');
+        const startButton = document.getElementById('start-button');
+        const mobileControls = document.getElementById('mobile-controls');
+        const scoreDisplay = document.getElementById('score-display');
+        let music, sfx;
+
+        // --- GAME VARIABLES ---
+        let gameState = 'start';
+        const gravity = 0.5;
+        let cameraX = 0;
+        let score = 0;
+        let enemies = [];
+
+        // --- PLAYER (KUCING SUREAL) ---
+        const player = {
+            x: 100, y: 200, width: 40, height: 40, speed: 5,
+            velocityX: 0, velocityY: 0, isJumping: true,
+            draw() {
+                // ... (kode gambar kucing sama seperti sebelumnya)
+                ctx.fillStyle = '#ff99ff'; ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.fillStyle = '#fff'; ctx.fillRect(this.x + 8, this.y + 10, 8, 8); ctx.fillRect(this.x + 24, this.y + 10, 8, 8);
+                ctx.fillStyle = '#000'; ctx.fillRect(this.x + 10, this.y + 12, 4, 4); ctx.fillRect(this.x + 26, this.y + 12, 4, 4);
+                ctx.fillStyle = '#ff99ff'; ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x + 10, this.y - 10); ctx.lineTo(this.x + 20, this.y); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(this.x + 20, this.y); ctx.lineTo(this.x + 30, this.y - 10); ctx.lineTo(this.x + 40, this.y); ctx.fill();
+            }
+        };
+
+        // --- LEVEL DESIGN ---
+        const platforms = [
+            { x: 0, y: 440, width: 800, height: 40 },
+            { x: 300, y: 350, width: 150, height: 20 }, { x: 550, y: 280, width: 150, height: 20 },
+            { x: 850, y: 320, width: 200, height: 20 }, { x: 1100, y: 250, width: 50, height: 20 },
+            { x: 1180, y: 200, width: 50, height: 20 }, { x: 1260, y: 150, width: 50, height: 20 },
+            { x: 1500, y: 350, width: 250, height: 20 }, { x: 1850, y: 280, width: 100, height: 20 },
+            { x: 2050, y: 220, width: 100, height: 20 }, { x: 2250, y: 160, width: 100, height: 20 },
+            { x: 2500, y: 440, width: 700, height: 40 },
+            // Level diperpanjang
+            { x: 3300, y: 440, width: 1000, height: 40 }, { x: 3400, y: 360, width: 150, height: 20 },
+            { x: 3650, y: 300, width: 150, height: 20 }, { x: 3900, y: 240, width: 150, height: 20 },
+            { x: 4400, y: 440, width: 200, height: 40 }, { x: 4650, y: 380, width: 200, height: 20 },
+            { x: 4900, y: 320, width: 200, height: 20 }, { x: 5150, y: 260, width: 200, height: 20 },
+            { x: 5500, y: 440, width: 900, height: 40 },
+            // Finish line
+            { x: 6200, y: 340, width: 40, height: 100, isFinish: true }
+        ];
+
+        // --- ENEMY CLASS ---
+        class Enemy {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.width = 30; this.height = 30;
+                this.speed = 1; this.startX = x;
+                this.range = 100;
+            }
+            update() {
+                this.x += this.speed;
+                if (this.x > this.startX + this.range || this.x < this.startX) {
+                    this.speed *= -1;
+                }
+            }
+            draw() {
+                ctx.fillStyle = '#7CFC00'; // Warna hijau slime
+                ctx.beginPath();
+                ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // --- CONTROLS ---
+        const keys = { right: false, left: false, up: false };
+        function handleKeyDown(e) { /* ... sama seperti sebelumnya ... */ if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true; if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true; if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = true; }
+        function handleKeyUp(e) { /* ... sama seperti sebelumnya ... */ if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false; if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false; if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = false; }
+
+        // --- GAME LOGIC ---
+        function update() {
+            if (gameState !== 'playing') return;
+
+            // Player movement
+            if (keys.right) player.velocityX = player.speed;
+            else if (keys.left) player.velocityX = -player.speed;
+            else player.velocityX = 0;
+
+            if (keys.up && !player.isJumping) {
+                player.velocityY = -12;
+                player.isJumping = true;
+                sfx.triggerAttackRelease('C5', '8n'); // Jump sound
+            }
+
+            player.x += player.velocityX;
+            player.y += player.velocityY;
+            player.velocityY += gravity;
+
+            // Platform collision
+            let onPlatform = false;
+            for (const p of platforms) {
+                if (player.x < p.x + p.width && player.x + player.width > p.x &&
+                    player.y + player.height > p.y && player.y + player.height < p.y + p.height + 15 && player.velocityY >= 0) {
+                    
+                    if (p.isFinish) {
+                        winGame();
+                        return;
+                    }
+                    player.y = p.y - player.height;
+                    player.velocityY = 0;
+                    player.isJumping = false;
+                    onPlatform = true;
+                }
+            }
+            if (!onPlatform) player.isJumping = true;
+
+            // Enemy collision
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                enemy.update();
+                if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x &&
+                    player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) {
+                    
+                    // Stomp on enemy
+                    if (player.velocityY > 0 && player.y + player.height < enemy.y + 20) {
+                        enemies.splice(i, 1);
+                        player.velocityY = -8; // Bounce
+                        sfx.triggerAttackRelease('E5', '8n'); // Stomp sound
+                        updateScore(100);
+                    } else {
+                        endGame("Kamu menabrak musuh!");
+                        return;
+                    }
+                }
+            }
+            
+            // World boundaries & game over
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > worldWidth) player.x = worldWidth - player.width;
+            if (player.y > worldHeight) {
+                endGame("Kamu Terjatuh!");
+            }
+        }
+
+        // --- DRAWING & RENDERING ---
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            cameraX = player.x - canvas.width / 3;
+            if (cameraX < 0) cameraX = 0;
+            if (cameraX > worldWidth - canvas.width) cameraX = worldWidth - canvas.width;
+
+            ctx.save();
+            ctx.translate(-cameraX, 0);
+
+            // Draw platforms
+            for (const p of platforms) {
+                ctx.fillStyle = p.isFinish ? '#FFD700' : '#3d251e';
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+            }
+            // Draw enemies
+            for (const enemy of enemies) { enemy.draw(); }
+            // Draw player
+            player.draw();
+
+            ctx.restore();
+        }
+
+        // --- GAME LOOP ---
+        function gameLoop() {
+            if (gameState === 'playing') {
+                update();
+            }
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- GAME STATE & AUDIO MANAGEMENT ---
+        function initAudio() {
+            sfx = new Tone.Synth().toDestination();
+            music = new Tone.Loop(time => {
+                sfx.triggerAttackRelease("C4", "8n", time);
+                sfx.triggerAttackRelease("G4", "8n", time + 0.25);
+                sfx.triggerAttackRelease("A4", "8n", time + 0.5);
+            }, "0.75s").start(0);
+            Tone.Transport.bpm.value = 140;
+        }
+        
+        function initLevel() {
+            enemies = [
+                new Enemy(550, 410), new Enemy(900, 290), new Enemy(1600, 320),
+                new Enemy(2600, 410), new Enemy(2800, 410), new Enemy(3500, 330),
+                new Enemy(3700, 270), new Enemy(4700, 350), new Enemy(5000, 290),
+                new Enemy(5600, 410), new Enemy(5800, 410),
+            ];
+        }
+
+        function updateScore(points) {
+            score += points;
+            scoreDisplay.innerText = `SKOR: ${score}`;
+        }
+
+        function startGame() {
+            if (Tone.context.state !== 'running') {
+                Tone.start();
+                initAudio();
+            }
+            Tone.Transport.start();
+            
+            player.x = 100; player.y = 200; player.velocityY = 0;
+            score = 0; updateScore(0);
+            initLevel();
+            gameState = 'playing';
+            uiContainer.style.display = 'none';
+            scoreDisplay.style.display = 'block';
+            if ('ontouchstart' in window) {
+                mobileControls.style.display = 'flex';
+            }
+        }
+
+        function endGame(message) {
+            Tone.Transport.stop();
+            sfx.triggerAttackRelease('C3', '0.5s'); // Game over sound
+            gameState = 'gameOver';
+            uiTitle.innerText = "GAME OVER";
+            uiSubtitle.innerText = message;
+            startButton.innerText = "COBA LAGI";
+            uiContainer.style.display = 'flex';
+            mobileControls.style.display = 'none';
+            scoreDisplay.style.display = 'none';
+        }
+        
+        function winGame() {
+            Tone.Transport.stop();
+            sfx.triggerAttackRelease('C6', '0.5s'); // Win sound
+            gameState = 'gameOver';
+            uiTitle.innerText = "KAMU MENANG!";
+            uiSubtitle.innerText = `Skor Akhir: ${score}`;
+            startButton.innerText = "MAIN LAGI";
+            uiContainer.style.display = 'flex';
+            mobileControls.style.display = 'none';
+            scoreDisplay.style.display = 'none';
+        }
+
+        // --- INITIALIZE ---
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+        startButton.addEventListener('click', startGame);
+        
+        // Mobile controls setup
+        const btnLeft = document.getElementById('btn-left');
+        const btnRight = document.getElementById('btn-right');
+        const btnJump = document.getElementById('btn-jump');
+        btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys.left = true; });
+        btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); keys.left = false; });
+        btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); keys.right = true; });
+        btnRight.addEventListener('touchend', (e) => { e.preventDefault(); keys.right = false; });
+        btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); keys.up = true; });
+        btnJump.addEventListener('touchend', (e) => { e.preventDefault(); keys.up = false; });
+        
+        gameLoop();
+    </script>
+</body>
+</html>
